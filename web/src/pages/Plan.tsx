@@ -1,4 +1,4 @@
-import { Info, Lifebuoy, Plus, Target, Trash, TrendUp } from '@phosphor-icons/react'
+import { Info, Lifebuoy, Plus, Target, Trash, TrendUp, Warning } from '@phosphor-icons/react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { api, type Debt, type Plan as P, type PayoffPlan } from '../api'
@@ -85,6 +85,14 @@ function RunwayCard({ d }: { d: P }) {
         </div>
       </div>
       <div className="px-3 pb-2 pt-2"><Chart option={option} height={200} ariaLabel="Projected cash balance" /></div>
+      {/* Louder than the income note below it on purpose: a missing rent does
+          not make this projection cautious, it makes it wrong. */}
+      {(rw.gaps ?? []).map((g) => (
+        <div key={g.key} className="flex items-start gap-2 border-t border-line bg-warn-soft px-5 py-2.5 text-[12px] text-warn">
+          <Warning size={14} weight="fill" className="mt-0.5 shrink-0" />
+          <span><span className="font-medium">{g.label}.</span> {g.detail}</span>
+        </div>
+      ))}
       {!rw.income_expected && (
         <div className="flex items-start gap-2 border-t border-line px-5 py-2.5 text-[12px] text-ink-3">
           <Info size={14} className="mt-0.5 shrink-0" />

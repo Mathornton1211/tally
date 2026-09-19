@@ -189,6 +189,9 @@ export type Runway = {
   next_income: { date: string; name: string; amount: number } | null
   committed_before_income: number; committed_through: string; income_expected: boolean
   safe_to_spend: number; buffer: number; days_of_cover_at_current_spending: number
+  /** Essentials missing from the data rather than from the person's life. Every
+   *  figure above is computed without them, so they belong next to the figures. */
+  gaps: { key: string; label: string; measured: number; detail: string }[]
 }
 /** The Plan page's savings goals: progress against one account's balance.
  *  `Goal` below is the same table read the other way -- against a trajectory. */

@@ -393,7 +393,7 @@ Demo data: `scripts/seed_sandbox.py` builds an 11 month household across 5 Sandb
 
 - Running in production on the home server against three real banks, behind
   Authentik, backed up to the NAS with a restore that has actually been done.
-- 312 tests, CI defined. **CI has never run** -- there is no remote, so nothing
+- 317 tests, CI defined. **CI has never run** -- there is no remote, so nothing
   has triggered it. Expect the first push to find something.
 - **Nothing is pushed anywhere.** No remote on the private repo; the export at
   `../tally-public` is one commit on disk. Publishing is one command and is

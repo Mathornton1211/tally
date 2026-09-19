@@ -366,6 +366,10 @@ def runway(conn, horizon_days: int = 90, buffer: Decimal | None = None) -> dict:
         "safe_to_spend": _q(cash - committed_before_income - buffer),
         "buffer": buffer,
         "days_of_cover_at_current_spending": days_of_cover,
+        # Every number above is computed from what Tally can see. When something
+        # big is missing from that, the figures are not wrong so much as
+        # answering a smaller question than the one being asked.
+        "gaps": data_gaps(conn),
     }
 
 
@@ -467,6 +471,43 @@ EMERGENCY_MONTHS = 3
 
 
 ESSENTIAL_CATEGORIES = ("rent", "bills", "groceries", "insurance", "auto", "health", "loans")
+
+# Housing under this much a month is not a housing cost, it is an artefact --
+# a rewards card that Plaid tags as rent, a one-off fee. Nobody's rent is $14.
+HOUSING_FLOOR = Decimal("200")
+
+
+def data_gaps(conn) -> list[dict]:
+    """Essentials that are missing from the data rather than from the person's life.
+
+    Found by using the app: rent paid from an account Tally cannot see made the
+    measured housing cost $13.97 a month -- two charges on a rewards card that
+    Plaid tags as rent. Nothing was wrong with any calculation. Runway, budgets
+    and every payoff date were simply built on a number that was short by the
+    largest bill there is, and said so nowhere.
+
+    A gap is reported as a QUESTION, not a finding. Plenty of people genuinely
+    have no rent: they own outright, or they live with family. What is not
+    acceptable is quietly planning as though housing were free.
+    """
+    gaps = []
+    housing = _q(conn.execute(
+        """SELECT coalesce(sum(spend), 0) / 3 AS per_month FROM v_txn
+           WHERE kind = 'expense' AND date >= current_date - 90
+             AND category = 'rent'""").fetchone()["per_month"])
+    mortgage = conn.execute(
+        """SELECT 1 FROM v_acct WHERE NOT hidden AND type = 'loan'
+             AND (subtype ILIKE '%mortgage%' OR name ILIKE '%mortgage%') LIMIT 1""").fetchone()
+    if housing < HOUSING_FLOOR and not mortgage:
+        gaps.append({
+            "key": "housing",
+            "label": "No rent or mortgage found",
+            "measured": housing,
+            "detail": ("Tally cannot see a housing payment in the accounts you have connected. "
+                       "If you pay rent or a mortgage from somewhere else, everything here is "
+                       "too optimistic by that amount until it is connected or recorded."),
+        })
+    return gaps
 
 
 def essentials_breakdown(conn, days: int = 90) -> dict[str, Decimal]:

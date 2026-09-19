@@ -176,3 +176,57 @@ def test_every_figure_in_the_answer_is_checkable(household):
     take = _row(rows, "take-home pay")["amount"]
     assert not unverified_figures(f"You would take home about ${take:,.2f} a month.", table)
     assert unverified_figures("You would take home about $99,999.00 a month.", table)
+
+
+# ---------------------------------------------------------------- what is not there
+
+def test_it_notices_when_housing_is_missing_entirely(conn):
+    """Found on real data: measured rent was $13.97 a month -- two charges on a
+    rewards card that Plaid tags as rent. The rent itself was paid from an
+    account Tally could not see. Nothing calculated anything wrongly; every
+    projection was simply short by the largest bill there is, silently."""
+    base(conn)
+    for i in range(3):
+        spend(conn, 30 * i + 1, 300, "groceries", i)
+        spend(conn, 30 * i + 2, 20, "rent", i)        # a rewards card artefact
+    conn.commit()
+
+    gap = next(g for g in plan.data_gaps(conn) if g["key"] == "housing")
+    assert gap["measured"] < plan.HOUSING_FLOOR
+    assert "too optimistic" in gap["detail"]
+
+
+def test_a_real_rent_is_not_reported_as_missing(household):
+    """The false positive that would make this feature noise."""
+    assert not any(g["key"] == "housing" for g in plan.data_gaps(household))
+
+
+def test_a_mortgage_counts_as_housing(conn):
+    """Somebody who owns is not missing a rent payment, and nagging them about
+    it is how a warning gets ignored."""
+    base(conn)
+    conn.execute("""INSERT INTO accounts (id, item_id, source, name, type, subtype, current_balance)
+                    VALUES ('m',1,'plaid','Home Loan','loan','mortgage',250000)""")
+    conn.commit()
+    assert not any(g["key"] == "housing" for g in plan.data_gaps(conn))
+
+
+def test_the_gap_travels_with_the_answer(conn):
+    base(conn)
+    for i in range(3):
+        spend(conn, 30 * i + 1, 300, "groceries", i)
+    conn.commit()
+    rows = chat.scenario_facts(conn, {"monthly_take_home": 5000})[1]
+    assert any(r["figure"].startswith("MISSING") for r in rows)
+
+
+def test_stating_the_rent_answers_the_gap(conn):
+    """Someone who says "rent will be $1,600" has told Tally the thing it was
+    missing, and repeating the warning back at them is noise."""
+    base(conn)
+    for i in range(3):
+        spend(conn, 30 * i + 1, 300, "groceries", i)
+    conn.commit()
+    rows = chat.scenario_facts(conn, {"monthly_take_home": 5000, "rent": 1600})[1]
+    assert not any(r["figure"].startswith("MISSING") for r in rows)
+    assert any(r["figure"] == "rent, changed" for r in rows)

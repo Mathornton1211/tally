@@ -268,6 +268,15 @@ def scenario_facts(conn, asked: dict) -> tuple[list[str], list[dict]]:
         facts.append({"figure": f"{key}, changed", "amount": ch["now"],
                       "note": f"a month, instead of the {ch['was']} measured from your own spending"})
 
+    # A gap the person has already answered in the question -- "rent will be
+    # $1,600" -- is not a gap any more. Anything still missing has to travel
+    # with the answer, or the answer is confidently short by a rent.
+    for gap in plan.data_gaps(conn):
+        if gap["key"] == "housing" and (overrides or {}).get("rent"):
+            continue
+        facts.append({"figure": f"MISSING: {gap['label']}", "amount": gap["measured"],
+                      "note": gap["detail"]})
+
     facts += [
         {"figure": "essential spending", "amount": w["essentials"], "note": "a month, measured from the last 90 days"},
         {"figure": "everything else you spend", "amount": w["flexible"],
@@ -354,7 +363,8 @@ def ask(conn, llm: LLM, question: str, history: list[dict] | None = None) -> Ite
                 "- If the rows are a what-if, lead with how long the debt takes and the date. Say plainly "
                 "that take-home is an estimate when a row says ESTIMATED, and that the spending figures "
                 "come from their own last 90 days. If 'left over' is negative, say the plan does not "
-                "balance and do not give a payoff date. Up to 6 sentences for these."},
+                "balance and do not give a payoff date. If any row starts with MISSING, say so before "
+                "anything else: the figures leave that cost out entirely. Up to 6 sentences for these."},
             {"role": "user", "content":
                 f"Today is {today.isoformat()}.\nQuestion: {question}\n"
                 + (f"SQL used: {sql}\n" if sql else "Worked out by Tally from your accounts and last 90 days.\n")
