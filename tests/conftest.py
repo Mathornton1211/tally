@@ -38,17 +38,16 @@ def _local_zone_name(conn) -> str:
     _ZONE_CACHE.append(name)
     return name
 
-@pytest.fixture(scope="session", autouse=True)
-def _aligned_timezone():
-    """Do what the pool does in production, before any test reads a date.
-
-    CI set TALLY_TIMEZONE=America/Los_Angeles on a UTC runner and six tests
-    failed -- including the regression test for the original timezone bug --
-    because Postgres was told and Python was not. Production aligns both in
-    db.pool(); the suite has to start from the same place or it is testing a
-    configuration that never runs.
-    """
-    db.align_process_timezone()
+# Aligned here, at import, and not in a fixture. Several test modules capture
+# TODAY = date.today() at module scope, and pytest imports those during
+# collection -- before any fixture has run. A fixture that aligns afterwards
+# leaves those constants a day off and the failures point everywhere except the
+# cause. conftest is imported first, so this is the only place early enough.
+#
+# Production does the same thing at the same moment: db.pool() aligns before
+# anything serves a request. A harness configured differently from the app is
+# testing something nobody runs.
+db.align_process_timezone()
 
 
 DEV_URL = os.environ.get("TALLY_TEST_DATABASE_URL",
