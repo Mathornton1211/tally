@@ -1,0 +1,82 @@
+# The thing a self-hoster checks before trusting an app with their bank
+# connection: is anybody actually running the tests.
+#
+# Three jobs, because they fail for different reasons and a red badge should
+# say which. Postgres is a real one, not a mock: half of what this app knows
+# lives in views, and a fake database would test none of it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Python tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: tally
+          POSTGRES_PASSWORD: tallydev
+          POSTGRES_DB: tally
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tally"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TALLY_TEST_DATABASE_URL: postgresql://tally:tallydev@127.0.0.1:5432/tally
+      # One definition of today, the way the containers run it. Without this the
+      # suite only catches date bugs during the hours two clocks disagree.
+      TALLY_TIMEZONE: America/Los_Angeles
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      # pg_dump: db.migrate refuses to apply a schema change to a database with
+      # data in it unless it can take a rollback point first, and two tests
+      # assert exactly that.
+      - name: Install pg_dump
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+
+  web:
+    name: Web typecheck, lint and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      # `tsc --noEmit` at the root checks NOTHING -- the root tsconfig is
+      # references-only with "files": []. This script points at the real one.
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+  image:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build -t tally:ci .
+      - name: The image has what migrations need
+        # A missing pg_dump does not fail until the first schema change on a
+        # database with real data in it, which is the worst possible moment to
+        # find out.
+        run: docker run --rm tally:ci sh -c "command -v pg_dump && python -c 'import tally.api'"

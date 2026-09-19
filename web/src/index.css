@@ -1,0 +1,209 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --page: #f5f5f1;
+  --surface: #ffffff;
+  --surface-2: #f9f9f6;
+  --hover: #f1f1ec;
+  --line: rgba(24, 24, 18, 0.08);
+  --line-strong: rgba(24, 24, 18, 0.14);
+  --ink: #17181a;
+  --ink-2: #52514e;
+  --ink-3: #898781;
+  --accent: #127a57;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3f1ea;
+  --positive: #16784c;
+  --negative: #b4302c;
+  --warn: #9a5b00;
+  --warn-soft: #fbf0dc;
+  --bad-soft: #fbe9e7;
+
+  /* chart roles, from the dataviz reference palette */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-compare: #c3c2b7;
+  --chart-grid: #e8e7e1;
+  --chart-axis: #898781;
+  --chart-surface: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0e0f0e;
+    --surface: #171816;
+    --surface-2: #1c1d1b;
+    --hover: #222320;
+    --line: rgba(255, 255, 255, 0.07);
+    --line-strong: rgba(255, 255, 255, 0.13);
+    --ink: #ededea;
+    --ink-2: #c3c2b7;
+    --ink-3: #8e8d86;
+    --accent: #3fbf8a;
+    --accent-ink: #07170f;
+    --accent-soft: #15291f;
+    --positive: #4cc38a;
+    --negative: #ff8a80;
+    --warn: #e3b341;
+    --warn-soft: #2a220f;
+    --bad-soft: #2d1614;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-compare: #4a4944;
+    --chart-grid: #262724;
+    --chart-axis: #8e8d86;
+    --chart-surface: #171816;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0e0f0e;
+  --surface: #171816;
+  --surface-2: #1c1d1b;
+  --hover: #222320;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+  --ink: #ededea;
+  --ink-2: #c3c2b7;
+  --ink-3: #8e8d86;
+  --accent: #3fbf8a;
+  --accent-ink: #07170f;
+  --accent-soft: #15291f;
+  --positive: #4cc38a;
+  --negative: #ff8a80;
+  --warn: #e3b341;
+  --warn-soft: #2a220f;
+  --bad-soft: #2d1614;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-compare: #4a4944;
+  --chart-grid: #262724;
+  --chart-axis: #8e8d86;
+  --chart-surface: #171816;
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad-soft: var(--bad-soft);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+}
+
+html, body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body { margin: 0; }
+
+.tnum { font-variant-numeric: tabular-nums; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(24, 24, 18, 0.03);
+}
+
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+.skeleton {
+  position: relative; overflow: hidden; background: var(--hover); border-radius: 8px;
+}
+.skeleton::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  animation: shimmer 1.4s infinite;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .skeleton::after {
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+  }
+}
+
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .skeleton::after { animation: none; }
+}
+
+/* ---------------------------------------------------------------- accents
+ *
+ * The accent is the one colour the app uses for "this is the thing to press".
+ * It is deliberately separate from the chart series colours: those have to
+ * stay distinguishable from each other and to a colourblind reader, and a
+ * theme repainting them would break every chart for the people who most need
+ * them to work.
+ *
+ * Each accent ships three tokens, because a button needs all three: the fill,
+ * an ink that reads on that fill, and a soft version for backgrounds. Light
+ * and dark get different values -- the same green that reads on white is muddy
+ * on near-black.
+ */
+
+:root[data-accent="evergreen"] { --accent: #127a57; --accent-ink: #ffffff; --accent-soft: #e3f1ea; }
+:root[data-accent="ocean"]     { --accent: #1f6feb; --accent-ink: #ffffff; --accent-soft: #e4edfd; }
+:root[data-accent="ember"]     { --accent: #b8501f; --accent-ink: #ffffff; --accent-soft: #fbeae1; }
+:root[data-accent="plum"]      { --accent: #8d3b6f; --accent-ink: #ffffff; --accent-soft: #f7e8f1; }
+:root[data-accent="slate"]     { --accent: #4a5568; --accent-ink: #ffffff; --accent-soft: #e9ebee; }
+:root[data-accent="gold"]      { --accent: #8a6410; --accent-ink: #ffffff; --accent-soft: #f7eeda; }
+
+:root[data-theme="dark"][data-accent="evergreen"] { --accent: #3fbf8a; --accent-ink: #07170f; --accent-soft: #15291f; }
+:root[data-theme="dark"][data-accent="ocean"]     { --accent: #4c9bff; --accent-ink: #061527; --accent-soft: #11212f; }
+:root[data-theme="dark"][data-accent="ember"]     { --accent: #f0803f; --accent-ink: #1e0d04; --accent-soft: #2c1a10; }
+:root[data-theme="dark"][data-accent="plum"]      { --accent: #d377b0; --accent-ink: #1d0715; --accent-soft: #2b1524; }
+:root[data-theme="dark"][data-accent="slate"]     { --accent: #9aa7bd; --accent-ink: #0d1219; --accent-soft: #1d222b; }
+:root[data-theme="dark"][data-accent="gold"]      { --accent: #d9a83c; --accent-ink: #1a1204; --accent-soft: #2a2110; }
+
+/* ---------------------------------------------------------------- more contrast
+ *
+ * Not a style. The default surfaces sit close together on purpose -- it is a
+ * calm way to show a lot of numbers -- and that is exactly wrong for reading
+ * them on a phone outdoors, or with less than perfect eyesight. This darkens
+ * the text and firms up every border rather than inventing a separate theme
+ * that then has to be maintained twice.
+ */
+
+:root[data-contrast] {
+  --ink-2: #2f2f2c;
+  --ink-3: #5c5a55;
+  --line: rgba(24, 24, 18, 0.22);
+  --line-strong: rgba(24, 24, 18, 0.38);
+  --chart-grid: #c9c8c1;
+  --chart-axis: #5c5a55;
+}
+
+:root[data-contrast][data-theme="dark"] {
+  --ink-2: #f2f2ef;
+  --ink-3: #c2c1ba;
+  --line: rgba(255, 255, 255, 0.22);
+  --line-strong: rgba(255, 255, 255, 0.42);
+  --chart-grid: #3d3e3a;
+  --chart-axis: #c2c1ba;
+}

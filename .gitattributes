@@ -1,0 +1,6 @@
+# The repo is LF everywhere. Checkouts on Windows get LF too, so a shell
+# script in the image is not silently given carriage returns.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.webp binary

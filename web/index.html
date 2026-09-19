@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f5f5f1" />
+    <script>
+      /* Before first paint: a stored dark preference must not flash light
+         first. Small enough to inline, and wrapped because localStorage throws
+         in a private window. */
+      (function () {
+        try {
+          var m = localStorage.getItem('tally.mode') || 'system'
+          var resolved = m === 'system'
+            ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : m
+          var r = document.documentElement
+          r.setAttribute('data-theme', resolved)
+          r.setAttribute('data-accent', localStorage.getItem('tally.accent') || 'evergreen')
+          if (localStorage.getItem('tally.contrast') === '1') r.setAttribute('data-contrast', '')
+        } catch (e) { document.documentElement.setAttribute('data-accent', 'evergreen') }
+      })()
+    </script>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Tally" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Tally</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

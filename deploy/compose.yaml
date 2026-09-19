@@ -1,0 +1,197 @@
+# Tally: self-hosted Mint replacement. Plaid read-only sync, local AI only.
+#
+# The spec lives with the code: /srv/tally/HANDOFF.md is the source of
+# truth. Destined for ~/homelab/stacks/tally/compose.yaml.
+#
+# Why tier ask: it holds Plaid access tokens that can read every bank account
+# the owner has. Read-only, but a full financial picture is still the most sensitive
+# data in the lab.
+#
+# Services:
+#   db      Postgres. Transactions, cursors, encrypted Plaid tokens.
+#   api     FastAPI + the built web app. Traefik -> Authentik -> here.
+#   worker  same image, polls Plaid every SYNC_INTERVAL_SECONDS.
+#   dump    pg_dump on the SAME image as db so client and server never drift.
+#
+# Deliberately absent:
+#   - no published ports      : Authentik in front of everything, and a DB of
+#                               bank transactions has no reason to be on the LAN
+#   - no NAS mounts           : dumps stay local until the owner says otherwise
+#   - no Plaid webhook route  : the home server is not internet-reachable; polling instead
+#   - no docker socket
+x-homelab:
+  tier: ask
+  wave: 4
+  data_class: irreplaceable
+  backup_paths:
+    - /srv/tally-data/tally/dumps
+    # Receipt photos exist nowhere else once the paper is thrown away.
+    - /srv/tally-data/tally/receipts
+  depends_on_host:
+    - /srv/tally
+  purpose: Personal finance. Plaid sync, Postgres, web UI, nightly logical dumps.
+  restart_on_deploy: api worker
+  unpinned_reason: >-
+    hl/tally is built here from /srv/tally. Base images in its Dockerfile
+    are the dial.
+
+x-tally-env: &tally-env
+  # What day it is, for Python AND for Postgres -- see tally/db.pool. A server
+  # in UTC and a household in California disagree for seven hours a day, which
+  # is long enough to move a transaction into the wrong month.
+  TZ: ${TALLY_TIMEZONE:-America/Los_Angeles}
+  TALLY_TIMEZONE: ${TALLY_TIMEZONE:-America/Los_Angeles}
+  TALLY_DATABASE_URL: postgresql://tally:${TALLY_DB_PASSWORD:?set TALLY_DB_PASSWORD in stacks/tally/.env}@hl-tally-db:5432/tally
+  # sandbox | production. The matching PLAID_SECRET_<ENV> is chosen from it, so
+  # one flip cannot pair a sandbox secret with the production host.
+  PLAID_ENV: ${PLAID_ENV:-sandbox}
+  PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:?}
+  PLAID_SECRET_SANDBOX: ${PLAID_SECRET_SANDBOX:-}
+  PLAID_SECRET_PRODUCTION: ${PLAID_SECRET_PRODUCTION:-}
+  PLAID_REDIRECT_URI: https://money.example.com/oauth
+  # Without this key every stored access token is unreadable. Copy lives in
+  # Vaultwarden. Losing it means re-linking all six banks, not data loss.
+  TALLY_FERNET_KEY: ${TALLY_FERNET_KEY:?}
+  SYNC_INTERVAL_SECONDS: "21600"
+  # Local AI (HANDOFF section 10). hl-ollama on the same hl-edge network; tally.llm
+  # refuses any non-local host. Same model as the rest of the lab so Tally never
+  # forces a model swap, and requests use ollama's default 4096 context for the
+  # same reason. AI_ENABLED=0 turns every AI feature off; the app works without it.
+  OLLAMA_URL: http://hl-ollama:11434
+  AI_MODEL: huihui_ai/qwen3-abliterated:30b-a3b
+  AI_ENABLED: "1"
+  # Receipt images. A bind mount, not a volume, so they sit next to the dumps
+  # and are covered by the same backup line below.
+  RECEIPTS_DIR: /data/receipts
+  # Where db.migrate puts the dump it takes before any schema change. The same
+  # directory as the nightly ones, so a single backup line covers both.
+  # The host path must be writable by uid 10001 -- the dump container runs as
+  # root and the app does not, so a root-owned directory makes the app refuse
+  # to migrate. chown 10001 /srv/tally-data/tally/dumps
+  TALLY_DUMP_DIR: /data/dumps
+  # Push notifications through the lab's own ntfy (stacks/alerting). The topic
+  # is the only secret there is, so it lives in .env and is generated per install.
+  NTFY_URL: http://hl-ntfy:80
+  NTFY_TOPIC: ${TALLY_NTFY_TOPIC:-}
+  TALLY_BASE_URL: https://money.example.com
+  # Monday morning. 0 = Monday, host local time.
+  BRIEF_WEEKDAY: "0"
+  BRIEF_HOUR: "8"
+
+services:
+  db:
+    image: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    container_name: hl-tally-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tally
+      POSTGRES_DB: tally
+      POSTGRES_PASSWORD: ${TALLY_DB_PASSWORD:?}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - /srv/tally-data/tally/pgdata:/var/lib/postgresql/data
+    networks: [hl-edge]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tally -d tally"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    labels:
+      homelab.managed: "true"
+      homelab.stack: tally
+      homelab.tier: ask
+      homelab.wave: "4"
+      homelab.state: building
+      homelab.data_class: irreplaceable
+
+  api:
+    build:
+      context: /srv/tally
+    image: hl/tally:local
+    container_name: hl-tally
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *tally-env
+    volumes:
+      - /srv/tally-data/tally/receipts:/data/receipts
+      - /srv/tally-data/tally/dumps:/data/dumps
+    networks: [hl-edge]
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 20s
+    labels:
+      homelab.managed: "true"
+      homelab.stack: tally
+      homelab.tier: ask
+      homelab.wave: "4"
+      homelab.state: building
+      homelab.data_class: replaceable
+      traefik.enable: "true"
+      # TLS name only. Plaid OAuth needs HTTPS, and the .lab names are HTTP.
+      # Needs a `tally` application + proxy provider in Authentik first, or the
+      # outpost 404s (same trap as trader.lab).
+      traefik.http.routers.tally-tls.rule: "Host(`money.example.com`)"
+      traefik.http.routers.tally-tls.entrypoints: websecure
+      traefik.http.routers.tally-tls.tls: "true"
+      traefik.http.routers.tally-tls.middlewares: "authentik@file"
+      traefik.http.routers.tally-tls.service: "tally"
+      traefik.http.services.tally.loadbalancer.server.port: "8000"
+
+  worker:
+    image: hl/tally:local
+    container_name: hl-tally-worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "-m", "tally.worker"]
+    environment: *tally-env
+    volumes:
+      - /srv/tally-data/tally/dumps:/data/dumps
+    networks: [hl-edge]
+    labels:
+      homelab.managed: "true"
+      homelab.stack: tally
+      homelab.tier: ask
+      homelab.wave: "4"
+      homelab.state: building
+      homelab.data_class: replaceable
+
+  dump:
+    image: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    container_name: hl-tally-dump
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: hl-tally-db
+      PGUSER: tally
+      PGDATABASE: tally
+      PGPASSWORD: ${TALLY_DB_PASSWORD:?}
+      INTERVAL_SECONDS: "86400"
+      KEEP: "14"
+    entrypoint: ["/bin/sh", "/dump.sh"]
+    volumes:
+      - ./dump.sh:/dump.sh:ro
+      - /srv/tally-data/tally/dumps:/dumps
+    networks: [hl-edge]
+    labels:
+      homelab.managed: "true"
+      homelab.stack: tally
+      homelab.tier: ask
+      homelab.wave: "4"
+      homelab.state: building
+      homelab.data_class: irreplaceable
+
+networks:
+  hl-edge:
+    name: hl-edge
+    external: true

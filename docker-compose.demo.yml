@@ -1,0 +1,46 @@
+# Overlay for a public demo. Used with the main file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
+#
+# or just ./scripts/demo.sh, which also seeds it.
+#
+# What makes it a demo rather than an install:
+#   - TALLY_DEMO=1        every write is refused by the same middleware that
+#                         already decides who can see and do what
+#   - TALLY_AUTH=proxy    no sign-in. There is nothing private here and a login
+#                         wall on a demo is a demo nobody looks at
+#   - sandbox only        the credentials cannot reach a real bank
+#
+# Deliberately still the real app: the real sync path, the real views, the real
+# local-AI code (off by default). A demo built from fixtures would be a
+# screenshot that lies.
+name: tally-demo
+
+services:
+  db:
+    # No host port. Nothing outside the compose network needs it.
+    ports: !override []
+
+  app:
+    environment:
+      TALLY_DEMO: "1"
+      TALLY_AUTH: proxy
+      PLAID_ENV: sandbox
+      AI_ENABLED: "0"
+      TALLY_DATABASE_URL: postgresql://tally:${TALLY_DB_PASSWORD:?}@db:5432/tally
+      TALLY_FERNET_KEY: ${TALLY_FERNET_KEY:?}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:?}
+      PLAID_SECRET_SANDBOX: ${PLAID_SECRET_SANDBOX:?}
+      RECEIPTS_DIR: /data/receipts
+      TALLY_DUMP_DIR: /data/dumps
+      TALLY_TIMEZONE: ${TALLY_TIMEZONE:-America/Los_Angeles}
+      TZ: ${TALLY_TIMEZONE:-America/Los_Angeles}
+      TALLY_BASE_URL: ${TALLY_DEMO_URL:-http://localhost:8098}
+    ports: !override
+      - "${TALLY_DEMO_BIND:-127.0.0.1}:${TALLY_DEMO_PORT:-8098}:8000"
+
+  # Nothing to sync: the data is seeded once and then frozen, which is what
+  # makes a demo reproducible. A worker would also be a write path.
+  worker:
+    deploy:
+      replicas: 0

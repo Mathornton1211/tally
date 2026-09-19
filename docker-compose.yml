@@ -1,0 +1,106 @@
+# Tally, standalone. One command on any machine with Docker:
+#
+#   ./scripts/install.sh
+#
+# This file is deliberately boring and self-contained: no external networks, no
+# reverse proxy, no host paths outside ./data. `deploy/compose.yaml` is the
+# other one -- that is the homelab stack, and it assumes Traefik, Authentik and
+# an ollama that already exist.
+#
+# Everything here is local. Transactions go to Postgres in a named volume, the
+# only thing that leaves the machine is the call to Plaid, and the AI features
+# talk to an ollama you point at (or stay off).
+
+name: tally
+
+x-env: &env
+  # What day it is, for Python AND for Postgres (see tally/db.pool). Leave it
+  # as your own timezone: a UTC server and a non-UTC household disagree about
+  # the date for several hours every day.
+  TZ: ${TALLY_TIMEZONE:-UTC}
+  TALLY_TIMEZONE: ${TALLY_TIMEZONE:-UTC}
+  TALLY_DATABASE_URL: postgresql://tally:${TALLY_DB_PASSWORD:?run scripts/install.sh first}@db:5432/tally
+  PLAID_ENV: ${PLAID_ENV:-sandbox}
+  PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:?}
+  PLAID_SECRET_SANDBOX: ${PLAID_SECRET_SANDBOX:-}
+  PLAID_SECRET_PRODUCTION: ${PLAID_SECRET_PRODUCTION:-}
+  PLAID_REDIRECT_URI: ${PLAID_REDIRECT_URI:-}
+  # Lose this and every stored bank connection has to be made again. It is not
+  # a data loss -- transactions are in Postgres either way -- but it is an
+  # afternoon of re-linking. Keep a copy somewhere safe.
+  TALLY_FERNET_KEY: ${TALLY_FERNET_KEY:?}
+  # Nothing is in front of this container, so Tally asks for a password itself.
+  TALLY_AUTH: ${TALLY_AUTH:-password}
+  TALLY_PASSWORD: ${TALLY_PASSWORD:-}
+  SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-21600}
+  # Local AI. Point at an ollama and set a model, or leave AI_ENABLED=0 -- every
+  # page works without it, the assistant and the auto-categoriser just go quiet.
+  AI_ENABLED: ${AI_ENABLED:-0}
+  OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+  AI_MODEL: ${AI_MODEL:-llama3.1:8b}
+  RECEIPTS_DIR: /data/receipts
+  # db.migrate writes a dump here before any schema change and refuses to apply
+  # one if it cannot. Back this directory up; it is the rollback point.
+  TALLY_DUMP_DIR: /data/dumps
+  NTFY_URL: ${NTFY_URL:-}
+  NTFY_TOPIC: ${NTFY_TOPIC:-}
+  TALLY_BASE_URL: ${TALLY_BASE_URL:-http://localhost:8099}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tally
+      POSTGRES_DB: tally
+      POSTGRES_PASSWORD: ${TALLY_DB_PASSWORD:?}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tally -d tally"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  app:
+    build: .
+    image: tally:local
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    environment: *env
+    ports:
+      # Loopback by default. Change to 0.0.0.0:8099 to reach it from the LAN,
+      # and read the note about that in the README first.
+      - "${TALLY_BIND:-127.0.0.1}:${TALLY_PORT:-8099}:8000"
+    volumes:
+      - ./data/receipts:/data/receipts
+      - ./data/dumps:/data/dumps
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 20s
+    extra_hosts:
+      # So OLLAMA_URL can point at an ollama running on the host itself.
+      - "host.docker.internal:host-gateway"
+
+  worker:
+    image: tally:local
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+      app: {condition: service_started}
+    command: ["python", "-m", "tally.worker"]
+    environment: *env
+    volumes:
+      - ./data/dumps:/data/dumps
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  pgdata:

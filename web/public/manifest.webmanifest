@@ -1,0 +1,21 @@
+{
+  "name": "Tally",
+  "short_name": "Tally",
+  "description": "Your money: what is due, what is left, and where it went.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f5f1",
+  "theme_color": "#127a57",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Plan", "url": "/plan" },
+    { "name": "Add a receipt", "url": "/receipts" },
+    { "name": "Ask Tally", "url": "/assistant" }
+  ]
+}
