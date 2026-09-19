@@ -316,7 +316,7 @@ Fair question to ask of anything you are about to give bank access to.
 
 - **Version** — shown on the Settings page and at `/healthz`, so "what is this
   box running" has an answer.
-- **Tests** — 317 of them, run on every push against a real Postgres. The suite
+- **Tests** — 318 of them, run on every push against a real Postgres. The suite
   includes the bugs that actually shipped, each one pinned by the test that
   would have caught it.
 - **CI** — `.github/workflows/ci.yml`: Python tests, web typecheck, lint,

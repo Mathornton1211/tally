@@ -192,3 +192,26 @@ def test_python_and_postgres_agree_on_what_day_it_is(conn):
     # insists on a real IANA name.
     conn.execute("SELECT set_config('TimeZone', %s, false)", ("-07:00",))
     assert (conn.execute("SELECT now()").fetchone()["now"].utcoffset().total_seconds() == 0)
+
+
+# ---------------------------------------------------------------- what day is it
+
+def test_aligning_the_timezone_reports_what_both_layers_will_use():
+    """The pool sets the Postgres session timezone from this, and on Linux the
+    process follows it. CI proved why that has to be one decision and not two:
+    TALLY_TIMEZONE on a UTC runner told the database and not Python, and six
+    tests failed -- among them the regression test for the original bug."""
+    import os
+    from tally import db
+    before = os.environ.get("TZ")
+    try:
+        os.environ["TALLY_TIMEZONE"] = "America/Los_Angeles"
+        assert db.align_process_timezone() == "America/Los_Angeles"
+        assert db.session_timezone() == "America/Los_Angeles"
+    finally:
+        os.environ.pop("TALLY_TIMEZONE", None)
+        if before is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = before
+        db.align_process_timezone()

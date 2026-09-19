@@ -38,6 +38,19 @@ def _local_zone_name(conn) -> str:
     _ZONE_CACHE.append(name)
     return name
 
+@pytest.fixture(scope="session", autouse=True)
+def _aligned_timezone():
+    """Do what the pool does in production, before any test reads a date.
+
+    CI set TALLY_TIMEZONE=America/Los_Angeles on a UTC runner and six tests
+    failed -- including the regression test for the original timezone bug --
+    because Postgres was told and Python was not. Production aligns both in
+    db.pool(); the suite has to start from the same place or it is testing a
+    configuration that never runs.
+    """
+    db.align_process_timezone()
+
+
 DEV_URL = os.environ.get("TALLY_TEST_DATABASE_URL",
                          "postgresql://tally:tallydev@127.0.0.1:5544/tally")
 

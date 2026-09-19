@@ -14,8 +14,10 @@ import logging
 import os
 import shutil
 import subprocess
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import psycopg
 from psycopg.rows import dict_row
@@ -168,6 +170,51 @@ def session_timezone() -> str:
     return "UTC"
 
 
+def align_process_timezone() -> str:
+    """Make Python's idea of today match the one the database will be given.
+
+    `session_timezone()` only told Postgres. Python kept using whatever the
+    process was started with, so setting TALLY_TIMEZONE=America/Los_Angeles in
+    a container running UTC recreated exactly the split-brain the session
+    timezone exists to prevent -- and did it quietly, from config alone.
+
+    CI found this on its first ever run: six failures, all one cause, including
+    the regression test written for the original bug. A self-hosted app whose
+    config can put it into a wrong state is one that will be in that state on
+    somebody else's machine.
+
+    tzset() is Unix-only. On Windows the process timezone cannot be changed
+    after start, so development there keeps the machine's own timezone; the
+    container that actually runs this is Linux.
+    """
+    tz = session_timezone()
+    if hasattr(time, "tzset"):
+        os.environ["TZ"] = tz
+        time.tzset()
+    elif _offset_of(tz) != datetime.now().astimezone().utcoffset():
+        # TZ is deliberately NOT set on this branch. Setting a value that
+        # cannot take effect would still change what session_timezone() reports
+        # next time, which makes a Windows dev box claim an alignment it does
+        # not have -- a worse failure than the one being reported.
+        # Windows: say it out loud rather than disagreeing quietly for the few
+        # hours a day it shows. Silence here is how the original bug survived
+        # for weeks.
+        log.warning(
+            "TALLY_TIMEZONE is %s but this process is running in %s, and the process timezone "
+            "cannot be changed on this platform. Postgres and Python will disagree about the "
+            "date for part of each day. Fine for development; the container that runs this in "
+            "production is Linux, where they are aligned.",
+            tz, datetime.now().astimezone().tzname())
+    return tz
+
+
+def _offset_of(name: str) -> timedelta | None:
+    try:
+        return datetime.now(ZoneInfo(name)).utcoffset()
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
+
+
 def pool(database_url: str) -> ConnectionPool:
     """Every connection agrees with Python about what day it is.
 
@@ -179,7 +226,7 @@ def pool(database_url: str) -> ConnectionPool:
     Setting the session timezone on every connection makes one of them right
     and the other one match it.
     """
-    tz = session_timezone()
+    tz = align_process_timezone()
 
     def configure(conn):
         # set_config rather than SET TIME ZONE: the latter takes no bind
