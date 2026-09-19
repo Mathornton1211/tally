@@ -400,14 +400,27 @@ def mode(conn, rw: dict, ds: list[Debt]) -> dict:
 # ---------------------------------------------------------------- what if
 
 def what_if(conn, monthly_income: Decimal, extra_to_debt: Decimal, cut_flexible_percent: Decimal,
-            emergency_target: Decimal | None = None) -> dict:
+            emergency_target: Decimal | None = None,
+            overrides: dict[str, Decimal] | None = None) -> dict:
     """One question: if this changes, what happens to the three dates that matter.
 
     Deliberately simple arithmetic on measured numbers, not a forecast model.
     Every input is a monthly figure the user can control or hope for.
+
+    `overrides` replaces one measured essential with a stated one -- "rent is
+    going to be $1,600" -- leaving every other category as it was actually
+    spent. What changed is reported back, because a payoff date that quietly
+    assumed different rent is a number nobody can check.
     """
     today = date.today()
-    essentials = essentials_per_month(conn)
+    breakdown = essentials_breakdown(conn)
+    changed = {}
+    for key, amount in (overrides or {}).items():
+        amount = _q(amount)
+        if breakdown.get(key, ZERO) != amount:
+            changed[key] = {"was": breakdown.get(key, ZERO), "now": amount}
+        breakdown[key] = amount
+    essentials = _q(sum(breakdown.values(), ZERO))
     flexible = conn.execute(
         """SELECT coalesce(sum(spend), 0) / 3 AS per_month FROM v_txn
            WHERE kind = 'expense' AND NOT essential AND date >= current_date - 90""").fetchone()["per_month"]
@@ -435,6 +448,7 @@ def what_if(conn, monthly_income: Decimal, extra_to_debt: Decimal, cut_flexible_
         "inputs": {"monthly_income": _q(monthly_income), "extra_to_debt": _q(extra_to_debt),
                    "cut_flexible_percent": cut_flexible_percent},
         "essentials": essentials, "flexible": flexible, "cut": cut, "spending": spending,
+        "essentials_by_category": breakdown, "changed": changed,
         "minimums": minimums,
         "left_over": left_over,
         "covers_the_month": left_over >= 0,
@@ -452,12 +466,27 @@ def what_if(conn, monthly_income: Decimal, extra_to_debt: Decimal, cut_flexible_
 EMERGENCY_MONTHS = 3
 
 
+ESSENTIAL_CATEGORIES = ("rent", "bills", "groceries", "insurance", "auto", "health", "loans")
+
+
+def essentials_breakdown(conn, days: int = 90) -> dict[str, Decimal]:
+    """The essential monthly spend, split by category.
+
+    Split rather than summed because a scenario usually changes exactly one
+    line of it -- moving house changes rent and nothing else -- and replacing
+    the whole figure with a guess throws away five categories that were
+    measured.
+    """
+    rows = conn.execute(
+        """SELECT category, coalesce(sum(spend), 0) / (%s / 30.0) AS per_month FROM v_txn
+           WHERE kind = 'expense' AND date >= current_date - %s
+             AND category = ANY(%s)
+           GROUP BY category""", (days, days, list(ESSENTIAL_CATEGORIES))).fetchall()
+    return {r["category"]: _q(r["per_month"]) for r in rows}
+
+
 def essentials_per_month(conn) -> Decimal:
-    r = conn.execute(
-        """SELECT coalesce(sum(spend), 0) / 3 AS per_month FROM v_txn
-           WHERE kind = 'expense' AND date >= current_date - 90
-             AND category IN ('rent', 'bills', 'groceries', 'insurance', 'auto', 'health', 'loans')""").fetchone()
-    return _q(r["per_month"])
+    return _q(sum(essentials_breakdown(conn).values(), ZERO))
 
 
 def goals(conn) -> list[dict]:

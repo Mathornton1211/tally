@@ -8,6 +8,17 @@ Two model steps with real computation between them:
 The model never sees raw tables it could misread and never does arithmetic the
 query did not already do. Every dollar figure in the reply is checked against
 the result rows; anything that does not trace back is flagged rather than shown.
+
+A question about the future takes the same shape with a different middle. "How
+long to pay off my debts if I take a job at $120k and rent goes to $1,600" has
+no SQL answer -- the answer is not in the history, it is computed FROM the
+history -- and the first version of this module could only write SQL, so it
+said it did not have enough information while the planner sat one import away
+with the person's real APRs and minimums in it. Now the model extracts the
+stated numbers, `plan.what_if` does the arithmetic, and the result comes back
+in the same (columns, rows) shape a query does, so the table, the answer step
+and the figure checker are all reused unchanged. A projected payoff date is
+exactly the sort of number a model will otherwise invent.
 """
 import json
 import re
@@ -16,7 +27,10 @@ from collections.abc import Iterator
 from datetime import date, timedelta
 from decimal import Decimal
 
+from . import plan, scenario
 from .llm import LLM, LLMUnavailable, unverified_figures
+
+ZERO = Decimal(0)
 
 MAX_ROWS = 200
 ROWS_TO_MODEL = 20
@@ -179,6 +193,14 @@ def _system_prompt(context: str, today: date) -> str:
             + SCHEMA
             + "\nAlmost everything is mode 'sql': any question naming a merchant, account, category, "
               "amount, date, bill, subscription, price, or balance can be answered from the data, so query it.\n"
+              "Use mode 'scenario' for a question about the FUTURE that supposes something changes -- a new "
+              "job or salary, a different rent, spending less, paying extra off a card -- and especially "
+              "'how long until I am debt free if...'. Put the numbers the person stated into the scenario "
+              "object and nothing else: annual_salary for a yearly figure like 120k, monthly_take_home only "
+              "if they said what they actually take home, rent for a new rent, cut_flexible_percent if they "
+              "said they would cut back (0 if they said they want to keep their lifestyle). Leave out "
+              "anything they did not say. Do NOT do arithmetic and do NOT write a reply; Tally computes the "
+              "answer from their real balances, APRs and spending.\n"
               "Use mode 'reply' only for greetings, thanks, or requests to change data (which you cannot do), "
               "with one short sentence and no numbers.\n\n"
             + f"TODAY is {today.isoformat()} ({today:%A}).\n{context}\n\nMONTHS:\n{table}\n\nExamples:\n{shots}")
@@ -191,11 +213,87 @@ def _plan(llm: LLM, question: str, history: list[dict], system: str, error: str 
     if error:
         user += f"\n\nYour previous query failed.\nSQL: {previous_sql}\nError: {error}\nWrite a corrected query."
     schema = {"type": "object", "required": ["mode"], "properties": {
-        "mode": {"type": "string", "enum": ["sql", "reply"]},
+        "mode": {"type": "string", "enum": ["sql", "reply", "scenario"]},
         "sql": {"type": "string"},
         "reply": {"type": "string"},
+        # Extraction only. The model pulls the stated numbers out of the
+        # sentence; Tally does every calculation from them (invariant 3).
+        "scenario": {"type": "object", "properties": {
+            "annual_salary": {"type": "number"},
+            "monthly_take_home": {"type": "number"},
+            "rent": {"type": "number"},
+            "cut_flexible_percent": {"type": "number"},
+        }},
     }}
     return llm.json("chat_plan", [{"role": "system", "content": system}, {"role": "user", "content": user}], schema)
+
+def scenario_facts(conn, asked: dict) -> tuple[list[str], list[dict]]:
+    """Compute a what-if from the stated numbers and the person's real data.
+
+    Returns the same (columns, rows) shape a query does, so the scenario path
+    reuses the answer step, the table the person sees, and -- the part that
+    matters -- the figure checker. A projected payoff date is exactly the kind
+    of number a model would happily invent.
+    """
+    take = None
+    if asked.get("monthly_take_home"):
+        income = Decimal(str(asked["monthly_take_home"]))
+    elif asked.get("annual_salary"):
+        take = scenario.take_home(Decimal(str(asked["annual_salary"])))
+        income = take["net_monthly"]
+    else:
+        raise ChatError("need to know the income to work from")
+
+    overrides = {"rent": Decimal(str(asked["rent"]))} if asked.get("rent") else None
+    cut = Decimal(str(asked.get("cut_flexible_percent") or 0))
+
+    # Everything left after living costs goes at the debt. That is what "how
+    # long to pay it off" asks, and cutting nothing is what "keep my lifestyle"
+    # asks, so the two together are the default and not an assumption.
+    probe = plan.what_if(conn, income, ZERO, cut, overrides=overrides)
+    extra = max(probe["left_over"], ZERO)
+    w = plan.what_if(conn, income, extra, cut, overrides=overrides)
+
+    facts: list[dict] = []
+    if take:
+        facts += [
+            {"figure": "salary, before tax", "amount": take["gross_annual"], "note": "a year, as stated"},
+            {"figure": "take-home pay", "amount": take["net_monthly"],
+             "note": f"a month, ESTIMATED: {take['assumes']}, {take['tax_year']} rates"},
+        ]
+    else:
+        facts.append({"figure": "take-home pay", "amount": income, "note": "a month, as stated"})
+
+    for key, ch in w["changed"].items():
+        facts.append({"figure": f"{key}, changed", "amount": ch["now"],
+                      "note": f"a month, instead of the {ch['was']} measured from your own spending"})
+
+    facts += [
+        {"figure": "essential spending", "amount": w["essentials"], "note": "a month, measured from the last 90 days"},
+        {"figure": "everything else you spend", "amount": w["flexible"],
+         "note": "a month, measured" + (f", cut by {cut}%" if cut else ", unchanged")},
+        {"figure": "total spending", "amount": w["spending"], "note": "a month"},
+        {"figure": "left over", "amount": w["left_over"], "note": "a month, after all of that"},
+    ]
+    if not w["covers_the_month"]:
+        # No payoff date at all. simulate() will happily produce one from the
+        # minimums, but somebody who cannot cover their essentials is not
+        # paying those minimums either, and a date computed from money that is
+        # not there is worse than saying so. The model cannot withhold a number
+        # it has been handed, so it is not handed one.
+        facts.append({"figure": "short each month", "amount": w["shortfall"],
+                      "note": "spending is above income, so there is no payoff date to give"})
+    elif w["debt_free"]:
+        facts += [
+            {"figure": "debt free in", "amount": w["debt_free"]["months"], "note": "months"},
+            {"figure": "debt free on", "amount": w["debt_free"]["date"],
+             "note": f"paying {extra} a month extra, highest APR first"},
+            {"figure": "interest paid getting there", "amount": w["debt_free"]["interest"], "note": "total"},
+        ]
+    else:
+        facts.append({"figure": "debts", "amount": 0, "note": "no balances to pay off"})
+    return ["figure", "amount", "note"], facts
+
 
 def ask(conn, llm: LLM, question: str, history: list[dict] | None = None) -> Iterator[dict]:
     """Yields events: status, sql, table, token, done, error."""
@@ -208,29 +306,34 @@ def ask(conn, llm: LLM, question: str, history: list[dict] | None = None) -> Ite
     try:
         yield {"type": "status", "text": "Reading your question"}
         system = _system_prompt(_context(conn), today)
-        plan = _plan(llm, question, history, system)
+        step = _plan(llm, question, history, system)
 
-        if plan.get("mode") == "reply" or not plan.get("sql"):
-            answer = plan.get("reply") or "Ask me about your spending, income, merchants, categories, or balances."
+        cols: list[str] = []
+        if step.get("mode") == "scenario":
+            yield {"type": "status", "text": "Working it out from your accounts"}
+            cols, rows = scenario_facts(conn, step.get("scenario") or {})
+
+        elif step.get("mode") == "reply" or not step.get("sql"):
+            answer = step.get("reply") or "Ask me about your spending, income, merchants, categories, or balances."
             yield {"type": "token", "text": answer}
             yield {"type": "done", "verified": True, "unverified": []}
             return
 
-        cols: list[str] = []
-        for attempt in range(2):
-            try:
-                sql = validate_sql(plan["sql"])
-                yield {"type": "sql", "sql": sql}
-                yield {"type": "status", "text": "Running the numbers"}
-                cols, rows = run_readonly(conn, sql)
-                break
-            except Exception as e:  # validation or database error: one repair attempt
-                if attempt == 1:
-                    raise ChatError(f"couldn't build a working query: {e}") from e
-                yield {"type": "status", "text": "Fixing the query"}
-                plan = _plan(llm, question, history, system, error=str(e), previous_sql=plan.get("sql"))
-                if plan.get("mode") != "sql" or not plan.get("sql"):
-                    raise ChatError("couldn't turn that into a query")
+        else:
+            for attempt in range(2):
+                try:
+                    sql = validate_sql(step["sql"])
+                    yield {"type": "sql", "sql": sql}
+                    yield {"type": "status", "text": "Running the numbers"}
+                    cols, rows = run_readonly(conn, sql)
+                    break
+                except Exception as e:  # validation or database error: one repair attempt
+                    if attempt == 1:
+                        raise ChatError(f"couldn't build a working query: {e}") from e
+                    yield {"type": "status", "text": "Fixing the query"}
+                    step = _plan(llm, question, history, system, error=str(e), previous_sql=step.get("sql"))
+                    if step.get("mode") != "sql" or not step.get("sql"):
+                        raise ChatError("couldn't turn that into a query")
 
         table = [{k: _jsonable(v) for k, v in r.items()} for r in rows]
         yield {"type": "table", "columns": cols, "rows": table, "truncated": len(rows) >= MAX_ROWS}
@@ -247,10 +350,15 @@ def ask(conn, llm: LLM, question: str, history: list[dict] | None = None) -> Ite
                 "- For price questions, compare the earliest and latest charges and say when it changed.\n"
                 "- Say which period the numbers cover, read from the SQL date filter (e.g. \"in July 2026\").\n"
                 "- If the result is empty, say you found no matching transactions and suggest how to rephrase.\n"
-                "- Spending is positive money out; don't call it negative."},
+                "- Spending is positive money out; don't call it negative.\n"
+                "- If the rows are a what-if, lead with how long the debt takes and the date. Say plainly "
+                "that take-home is an estimate when a row says ESTIMATED, and that the spending figures "
+                "come from their own last 90 days. If 'left over' is negative, say the plan does not "
+                "balance and do not give a payoff date. Up to 6 sentences for these."},
             {"role": "user", "content":
-                f"Today is {today.isoformat()}.\nQuestion: {question}\nSQL used: {sql}\n"
-                f"Result ({len(table)} rows{', first ' + str(ROWS_TO_MODEL) + ' shown' if len(table) > ROWS_TO_MODEL else ''}):\n"
+                f"Today is {today.isoformat()}.\nQuestion: {question}\n"
+                + (f"SQL used: {sql}\n" if sql else "Worked out by Tally from your accounts and last 90 days.\n")
+                + f"Result ({len(table)} rows{', first ' + str(ROWS_TO_MODEL) + ' shown' if len(table) > ROWS_TO_MODEL else ''}):\n"
                 f"{_csv(cols, shown)}"},
         ]):
             pieces.append(piece)

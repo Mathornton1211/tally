@@ -90,7 +90,7 @@ function Answer({ m }: { m: Msg }) {
             <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-3" style={{ animationDelay: `${i * 120}ms` }} />
           ))}</div>
         )}
-        {!m.pending && m.sql && (
+        {!m.pending && (m.sql || m.table) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {m.verified ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-positive">
@@ -107,9 +107,14 @@ function Answer({ m }: { m: Msg }) {
             </button>
           </div>
         )}
-        {open && m.sql && (
+        {open && (m.sql || m.table) && (
           <div className="mt-2 overflow-hidden rounded-xl border border-line">
-            <pre className="overflow-x-auto whitespace-pre-wrap bg-surface-2 px-3 py-2 font-mono text-[11px] leading-relaxed text-ink-2">{m.sql}</pre>
+            {/* A what-if has no SQL: the figures are computed from the history
+                rather than found in it. The table is still the whole working,
+                so it has to be reachable either way. */}
+            {m.sql
+              ? <pre className="overflow-x-auto whitespace-pre-wrap bg-surface-2 px-3 py-2 font-mono text-[11px] leading-relaxed text-ink-2">{m.sql}</pre>
+              : <p className="bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-ink-2">Worked out from your balances, APRs and minimum payments, with spending measured over your last 90 days. Take-home pay from a salary is an estimate.</p>}
             {m.table && <ResultTable t={m.table} />}
           </div>
         )}

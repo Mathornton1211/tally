@@ -354,11 +354,46 @@ Demo data: `scripts/seed_sandbox.py` builds an 11 month household across 5 Sandb
   `.gitattributes` pinning LF, so a shell script in the image is never handed
   carriage returns by a Windows checkout.
 
+**Asking about the future (2026-09-18).** `tally/scenario.py`, `chat.scenario_facts()`.
+
+- Found by using it: *"if I start a job making 120k a year and start paying
+  1600 in rent, how long to pay off debts and keep my lifestyle?"* got **"I
+  don't have enough information about your debts or lifestyle"** -- twice, then
+  again after the person pointed out that Tally has six months of their
+  spending. It does. It also has their balances, APRs and minimums.
+- The cause was architectural, not a bad prompt. The assistant could only write
+  **one SELECT over history**, and this answer is not *in* the history, it is
+  computed *from* it. The model correctly found no query, said so, and `plan.py`
+  -- which answers exactly this question -- sat one import away.
+- Now a third planner mode. The model does **extraction only** (the stated
+  salary, rent, any cut); `plan.what_if()` does every calculation; the result
+  comes back in the same `(columns, rows)` shape a query returns, so the table,
+  the answer step and the figure checker are reused unchanged. Invariant 3
+  holds: a projected payoff date is precisely the number a model would invent.
+- **A salary is gross and a budget is net, and that gap is a third of the
+  money.** $120k is about **$7,294/month**, not $10,000. Planning on the gross
+  figure does not give a slightly optimistic date, it gives one that cannot
+  happen. `scenario.take_home()` estimates it, returns every component so the
+  estimate can be argued with, is labelled ESTIMATED in the rows themselves,
+  and is skipped entirely if the person states their actual take-home.
+- **One override, not a re-estimate.** "Rent will be $1,600" replaces the
+  measured rent and nothing else; groceries, bills and insurance stay as they
+  were actually spent, and `changed` reports the old figure so the swap is
+  visible rather than assumed.
+- **A plan that does not balance gets no payoff date.** A test caught this in
+  my own code: `simulate()` will happily return a date from the minimums alone,
+  but somebody who cannot cover their essentials is not paying those minimums
+  either. The prompt said not to give a date; that is not a control, because a
+  model cannot withhold a number it has been handed. So it is not handed one --
+  the rows carry the monthly shortfall instead.
+- The Assistant's "How I got this" panel was gated on there being SQL, so a
+  what-if would have shown an answer with no working. It now opens either way.
+
 **Where this stands (2026-09-18).** Feature work is at a natural stopping point.
 
 - Running in production on the home server against three real banks, behind
   Authentik, backed up to the NAS with a restore that has actually been done.
-- 299 tests, CI defined. **CI has never run** -- there is no remote, so nothing
+- 312 tests, CI defined. **CI has never run** -- there is no remote, so nothing
   has triggered it. Expect the first push to find something.
 - **Nothing is pushed anywhere.** No remote on the private repo; the export at
   `../tally-public` is one commit on disk. Publishing is one command and is

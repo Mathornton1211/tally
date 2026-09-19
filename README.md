@@ -49,6 +49,14 @@ wrong reading is visible rather than a silently wrong total. The numbers are
 computed in SQL over the matched rows, so they can never be a model's
 arithmetic.
 
+**It answers questions about a life you do not have yet.** "If I take a job at
+$120k and rent goes to $1,600, how long until the cards are gone?" is answered
+from your real balances, APRs and the last 90 days of your own spending — and
+from an estimate of what $120k actually *pays*, which is about $7,300 a month,
+not $10,000. Planning on the gross number is not optimism, it is a date that
+cannot happen. If the month does not balance, you get the shortfall instead of
+a comfortable date.
+
 **It keeps working while nobody is looking.** After every sync the same rules
 run again and what they find accumulates. Not "Netflix went up $3" — *"Netflix
 has gone up three times since 2024, $84 a year more than when you signed up."*
@@ -308,7 +316,7 @@ Fair question to ask of anything you are about to give bank access to.
 
 - **Version** — shown on the Settings page and at `/healthz`, so "what is this
   box running" has an answer.
-- **Tests** — 299 of them, run on every push against a real Postgres. The suite
+- **Tests** — 312 of them, run on every push against a real Postgres. The suite
   includes the bugs that actually shipped, each one pinned by the test that
   would have caught it.
 - **CI** — `.github/workflows/ci.yml`: Python tests, web typecheck, lint,
