@@ -14,7 +14,7 @@ ZERO = Decimal(0)
 
 # Self-employment tax is 15.3% of 92.35% of net earnings (~14.1%), plus federal
 # and state income tax. 27% is a common rule of thumb for a low-to-middle
-# bracket in California; the owner can change it in settings.
+# bracket in California; the user can change it in settings.
 DEFAULT_RATE = Decimal("27")
 
 # Estimated tax deadlines. Q4 is paid in January of the following year.

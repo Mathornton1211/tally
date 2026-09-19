@@ -2,7 +2,7 @@
 
 Rules only. Each alert stores the rule, what it saw, and the threshold it
 crossed (invariant 7), plus a fingerprint so a rescan never recreates an alert
-The owner already dismissed.
+the user already dismissed.
 
 Honest limit, repeated from the spec: Plaid data lands hours after a charge.
 This is a second net behind each bank's own push alerts, not a replacement.
@@ -291,7 +291,7 @@ def evaluate(rows: list[dict], history: list[dict], streams: list[analytics.Stre
             f"before now was {personal}.",
             {"count": len(g), "threshold": bar, "personal_busiest": personal}, g, d, total))
 
-    # 7. Bank fees the owner can often get reversed.
+    # 7. Bank fees the user can often get reversed.
     for r in rows:
         kind = fees.classify(r) if Decimal(r["amount"]) > 0 else None
         if kind in ("overdraft", "nsf", "late"):

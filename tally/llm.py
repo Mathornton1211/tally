@@ -141,7 +141,7 @@ def unverified_figures(text: str, *sources) -> list[str]:
 
     HANDOFF invariant 3: the model phrases numbers, it never produces them. An
     empty list means every figure it wrote exists in the data it was given
-    (allowing for its own rounding). Anything returned is shown to the owner as
+    (allowing for its own rounding). Anything returned is shown to the user as
     unverified rather than silently trusted.
     """
     allowed: set[str] = set()

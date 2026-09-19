@@ -22,9 +22,9 @@ CREATE TABLE liabilities (
     updated_at             timestamptz NOT NULL DEFAULT now()
 );
 
--- Small key/value store for things with exactly one value: how much extra Mat
--- can put toward debt, the cash floor he wants to keep, which payoff order he
--- picked. No migration needed to add the next one.
+-- Small key/value store for things with exactly one value: how much extra the
+-- household can put toward debt, the cash floor it wants to keep, which payoff
+-- order was picked. No migration needed to add the next one.
 CREATE TABLE app_settings (
     key        text PRIMARY KEY,
     value      jsonb NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE goals (
     kind                 text NOT NULL CHECK (kind IN ('emergency', 'savings', 'payoff', 'custom')),
     target_amount        numeric(14,2),
     -- Progress is read live from this account when set, so a goal is never a
-    -- number the owner has to keep updated by hand.
+    -- number the user has to keep updated by hand.
     account_id           text REFERENCES accounts(id) ON DELETE SET NULL,
     monthly_contribution numeric(14,2),
     target_date          date,

@@ -387,6 +387,10 @@ export default function Dashboard() {
   const q = useQuery({ queryKey: ['dashboard'], queryFn: api.dashboard })
   const rec = useQuery({ queryKey: ['recurring'], queryFn: api.recurring })
   const [open, setOpen] = useState<Txn | null>(null)
+  // Whoever is actually looking. The greeting was hardcoded to the first
+  // owner's name, which is wrong the moment a second person signs in.
+  const who = useQuery({ queryKey: ['people'], queryFn: api.people, staleTime: 60_000 })
+  const me = who.data?.people.find((p) => p.id === who.data?.me)?.name
   const d = q.data
 
   return (
@@ -394,7 +398,7 @@ export default function Dashboard() {
       <SetupStrip />
       <ReviewStrip />
       <div className="mb-6">
-        <h1 className="text-[26px] font-semibold tracking-tight text-ink">{greeting()}, Mat</h1>
+        <h1 className="text-[26px] font-semibold tracking-tight text-ink">{greeting()}{me ? `, ${me}` : ''}</h1>
         <p className="mt-1 text-[14px] text-ink-3">
           {parseDate(d?.today ?? new Date().toISOString()).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
         </p>

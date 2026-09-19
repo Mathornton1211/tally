@@ -17,7 +17,7 @@ CREATE TABLE merchant_aliases (
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- The model's category, kept apart from the owner's own edit (`category`) so a
+-- The model's category, kept apart from the user's own edit (`category`) so a
 -- correction always wins and the UI can say who decided.
 ALTER TABLE transactions ADD COLUMN category_ai text REFERENCES categories(key);
 ALTER TABLE transactions ADD COLUMN category_ai_model text;
@@ -67,7 +67,7 @@ WITH base AS (
   FROM transactions t
   LEFT JOIN merchant_aliases ma
        ON ma.raw_key = tally_raw_key(COALESCE(NULLIF(t.raw->>'original_description', ''), t.name))
-      -- the owner's own rename beats Plaid; the model's guess only fills gaps Plaid left.
+      -- the user's own rename beats Plaid; the model's guess only fills gaps Plaid left.
       AND (ma.source = 'user' OR t.merchant_name IS NULL)
 ), named AS (
   SELECT b.*,

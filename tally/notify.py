@@ -45,7 +45,7 @@ class Notifier:
         try:
             r = self._http.get(f"{self.url}/v1/health", timeout=5)
             # The topic is shown in full: the UI behind Authentik is exactly
-            # where it belongs, and the owner needs it to subscribe on his phone.
+            # where it belongs, and the user needs it to subscribe on their phone.
             return {"enabled": True, "reachable": r.status_code == 200,
                     "topic": self.topic, "url": self.url,
                     "subscribe_url": f"{self.url}/{self.topic}"}

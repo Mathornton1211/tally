@@ -9,7 +9,7 @@ INSERT INTO categories (key, label, kind, icon, sort, essential) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 -- Deposits from the usual platforms are self-employment income by default.
--- A rule the owner sets, or an edit on one transaction, still wins over this.
+-- A rule the user sets, or an edit on one transaction, still wins over this.
 CREATE FUNCTION tally_freelance_default(bank_text text) RETURNS boolean
 LANGUAGE sql IMMUTABLE AS $$
   SELECT coalesce(bank_text, '') ~* '(upwork|fiverr|stripe|paypal|gusto pay.*1099|toptal|contra|deel|wise|venmo.*business)'

@@ -1,5 +1,5 @@
 """Background enrichment: readable merchant names and categories for the rows
-Plaid was unsure about. Runs after sync; safe to rerun; never overrides Mat.
+Plaid was unsure about. Runs after sync; safe to rerun; never overrides a name a person set.
 
 Both tasks batch many rows per call and use structured output, so a run over a
 few hundred new transactions is a handful of model calls, not hundreds.

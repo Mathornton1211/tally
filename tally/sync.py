@@ -19,7 +19,7 @@ log = logging.getLogger("tally.sync")
 
 MAX_PAGINATION_RESTARTS = 3
 
-# Errors that need the owner to re-login through Link update mode. Retrying these
+# Errors that need the user to re-login through Link update mode. Retrying these
 # on a timer does nothing but fill the log.
 LOGIN_ERRORS = {"ITEM_LOGIN_REQUIRED", "PENDING_EXPIRATION", "PENDING_DISCONNECT",
                 "INVALID_CREDENTIALS", "INVALID_MFA", "USER_SETUP_REQUIRED"}

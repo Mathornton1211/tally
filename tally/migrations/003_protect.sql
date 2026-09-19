@@ -1,6 +1,6 @@
 -- Fees, alerts, per-account facts Plaid does not provide, and merchant rules.
 
--- Things only the owner knows about an account. Plaid has no APY, no foreign
+-- Things only the user knows about an account. Plaid has no APY, no foreign
 -- transaction fee, no waiver rule. Every field is optional; insights that need
 -- a missing one say so instead of guessing.
 CREATE TABLE account_settings (
@@ -16,7 +16,7 @@ CREATE TABLE account_settings (
 );
 
 -- "Always call Vons groceries." Keyed on the lowercased merchant, which is
--- what the owner sees. A user edit on a single transaction still wins over a rule.
+-- what the user sees. A user edit on a single transaction still wins over a rule.
 CREATE TABLE category_rules (
     merchant_key text PRIMARY KEY,
     category     text NOT NULL REFERENCES categories(key),
@@ -25,7 +25,7 @@ CREATE TABLE category_rules (
 
 CREATE TABLE alerts (
     id           bigserial PRIMARY KEY,
-    -- Stable identity so a rescan never duplicates an alert the owner already handled.
+    -- Stable identity so a rescan never duplicates an alert the user already handled.
     fingerprint  text NOT NULL UNIQUE,
     rule         text NOT NULL,
     severity     text NOT NULL CHECK (severity IN ('low', 'medium', 'high')),

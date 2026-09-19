@@ -6,7 +6,7 @@
 
 CREATE TABLE receipts (
     id            bigserial PRIMARY KEY,
-    filename      text NOT NULL,          -- what the owner's phone called it
+    filename      text NOT NULL,          -- what the user's phone called it
     stored_name   text NOT NULL UNIQUE,   -- what it is called on disk
     content_type  text NOT NULL,
     bytes         integer NOT NULL,

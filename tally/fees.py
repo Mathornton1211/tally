@@ -1,4 +1,4 @@
-"""Fees: find every one, then say how to stop it, in the owner's own numbers.
+"""Fees: find every one, then say how to stop it, in the user's own numbers.
 
 HANDOFF section 6. Detection is deterministic: Plaid's BANK_FEES categories
 first, then the bank's own wording. The playbook text is templated from facts

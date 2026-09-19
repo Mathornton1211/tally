@@ -18,7 +18,7 @@ comment in the code, this wins.
 
 ## 1. Context
 
-- **Owner:** Mat. Experienced with Linux, Docker, Postgres, n8n. Do not explain
+- **Owner:** The owner. Experienced with Linux, Docker, Postgres, n8n. Do not explain
   basics. Prefers PowerShell on Windows. No em dashes in written output.
 - **Cost:** $0. Plaid Trial plan (free, real data, 10 Item cap). Local models
   only. No paid APIs, no SaaS.
@@ -209,7 +209,7 @@ Demo data: `scripts/seed_sandbox.py` builds an 11 month household across 5 Sandb
 - **What the check actually found:** the newest nightly dump was taken at 21:11, before the banks were connected, and contained zero transactions. 508 real transactions existed in exactly one place. Took a dump immediately (75K, 508 rows) and ran `scripts/restore_test.sh` against it -- passes, 10 accounts, 3 items with stored tokens.
 - **`db.migrate` now takes a dump before applying any schema change**, and *refuses to migrate* if it cannot. That is the operation that runs unattended on every deploy against the only irreplaceable thing here, so a container that will not start and says why beats an unattended migration with no way back. Skipped when the database has no transactions (a fresh install has nothing to lose) and escapable with `TALLY_SKIP_PREMIGRATION_DUMP=1`. Needs `TALLY_DUMP_DIR`, mounted by both compose files, and `postgresql-client`, now in the image.
 - **Do not trust the pgdata rsync.** `stacks/backup` rsyncs all of `hl-data` to the NAS nightly, which for a running Postgres is a torn file-level copy, not a restorable backup. The dumps in the same tree are the real thing.
-- **Still open, needs Mat:** `stacks/backup-offsite` has no `.env` and no container -- there is no third copy. Everything lives on the home server and the NAS, in the same building. And `TALLY_FERNET_KEY` is still only in `stacks/tally/.env`; without it all three bank connections have to be made again.
+- **Still open, needs the owner:** `stacks/backup-offsite` has no `.env` and no container -- there is no third copy. Everything lives on the home server and the NAS, in the same building. And `TALLY_FERNET_KEY` is still only in `stacks/tally/.env`; without it all three bank connections have to be made again.
 - Tests: `tests/test_migrations.py` (6; two need pg_dump on PATH).
 
 **Themes (2026-09-17).** `web/src/lib/theme.ts`, `/settings`.
@@ -273,7 +273,7 @@ Demo data: `scripts/seed_sandbox.py` builds an 11 month household across 5 Sandb
 - Email versions for providers with no phone line, kept short on purpose — a long email invites a reply asking for detail, which restarts the clock.
 
 **A regular coffee is not a subscription (2026-09-18).** `analytics.HABIT_CATEGORIES`.
-- The owner reported retail showing up as bills. A fast food chain and a coffee shop were on the Recurring page: both have a cadence and a stable-ish price, which was all `detect_recurring` asked for. The existing 35% variance tolerance is wide enough for coffee.
+- the owner reported retail showing up as bills. A fast food chain and a coffee shop were on the Recurring page: both have a cadence and a stable-ish price, which was all `detect_recurring` asked for. The existing 35% variance tolerance is wide enough for coffee.
 - **A bill charges the same amount; a habit merely costs about the same.** In dining, groceries, auto and travel a stream now needs `fixed_price` to count.
 - That was not enough on its own. A fast food chain survived at 12.71, 12.82, 12.82 -- two coincidentally equal receipts put 67% of the history on one price, clearing a 60% bar **only if you believe three points**. Habit categories now need six charges as well. A real meal kit or coffee plan bills many times, so the bar costs nothing.
 - **Second bug fixed by the same change:** everyday spending is already projected per-day by `plan._daily_discretionary`, so a a fast food chain "bill" was charging the same money twice in the runway.
@@ -307,21 +307,66 @@ Demo data: `scripts/seed_sandbox.py` builds an 11 month household across 5 Sandb
 - A refused removal raises an alert, because the transaction still counts in every total and a statement will not agree with it. Finding that out from a chart looking odd is not good enough.
 - `GET /api/removals` shows what sync has been asked to delete and what it did about it.
 
-**Next:** Connect your banks
+**A public copy, kept current (2026-09-18).** `scripts/make_public.py`.
 
+- The working repo cannot be published. It carries a real hostname, real paths,
+  a landlord's name and a household's spending, and 35 commits of history that
+  say all of it again. Rewriting that history is exactly the kind of job that
+  looks finished and is not.
+- So the public repo is a **generated export**, not a branch. Substitutions for
+  every identifying string, a banner on this file, and a fresh history. The
+  private past never leaves the machine.
+- **The verify step is the feature.** It greps the finished tree for every
+  pattern the script claims to remove and refuses to continue if any survive.
+  It earned its place on the first run: four files, including `tally/enrich.py`
+  -- a landlord's name inside an LLM prompt that ships to every user.
+- Everything it caught was fixed **at source**, not only in the export: the
+  prompt, the demo generator's bank names, a credit union named in fee advice,
+  a LAN address in a test, a regional utility as a fixture. None of them needed
+  to be real to do their job. The export is now a formality for those files,
+  which is the right place for it to be.
+- **Keeping the two in step is the same command.** Files are replaced wholesale
+  so an upstream deletion disappears publicly too, but the export's own git
+  history is kept, so an update is an ordinary commit rather than a force-push
+  over whatever was published:
 
+      python scripts/make_public.py ../tally-public -m "What changed" --push
 
+  A run with nothing new says so and commits nothing. Re-run it after any round
+  of work; there is no second workflow to remember.
+- The script excludes itself. It necessarily contains every real name it exists
+  to remove, so shipping it would undo the exercise.
+- Also added: `LICENSE` (the README had been claiming MIT with no file) and
+  `.gitattributes` pinning LF, so a shell script in the image is never handed
+  carriage returns by a Windows checkout.
 
+**Where this stands (2026-09-18).** Feature work is at a natural stopping point.
 
+- Running in production on the home server against three real banks, behind
+  Authentik, backed up to the NAS with a restore that has actually been done.
+- 297 tests, CI defined. **CI has never run** -- there is no remote, so nothing
+  has triggered it. Expect the first push to find something.
+- **Nothing is pushed anywhere.** No remote on the private repo; the export at
+  `../tally-public` is one commit on disk. Publishing is one command and is
+  deliberately left to a human:
 
+      cd ../tally-public && gh repo create tally --public --source=. --push
 
+**Next, when this picks up again:**
 
+1. Publish, then watch CI fail and fix it. Nothing else can be trusted until
+   that has run once.
+2. CSV import (Mint, Monarch, YNAB). The most-asked-for thing that is missing,
+   and the difference between "try it" and "move to it".
+3. `scripts/demo.sh` has never been run end to end. It is the first thing a
+   stranger touches.
+4. A third backup copy outside the building. The NAS and the server are in the
+   same room, which is one flood away from no copies at all.
 
-
- (one OAuth bank first to prove the redirect), then budgets/forecast, Discord alerts. Previously: deploy to the home server (needs an Authentik application for
-`money.example.com`, a prod Fernet key into Vaultwarden, `.env` with a DB
-password), then link one real OAuth bank to prove the redirect, then phase 2.
-
+**Still needs a person, not a commit:** the Fernet key into Vaultwarden (without
+it all three bank connections have to be made again), rotating the Plaid keys,
+and the reversible bank fees and the duplicate charge that are worth a phone
+call.
 ---
 
 ## 2. Hard invariants
@@ -579,7 +624,7 @@ use the 8B. Every call is logged with duration so slowness is visible.
 - Plaid `client_id`, `secret`, Fernet key in `stacks/tally/.env` (git-ignored).
   Copy of the Fernet key in Vaultwarden.
 - DB not exposed outside the compose network.
-- Nightly `pg_dump` to local disk, encrypted. **Not to the NAS without Mat
+- Nightly `pg_dump` to local disk, encrypted. **Not to the NAS without the owner
   saying so.**
 - Plaid Link redirect URI registered as `https://money.example.com/oauth`.
 - No bank credentials ever touch Tally; Plaid Link handles login.
@@ -632,9 +677,12 @@ use the 8B. Every call is logged with duration so slowness is visible.
 
 ---
 
-## 14. Waiting on Mat
+## 14. Waiting on the owner
 
 - ~~Plaid account, keys, redirect URI~~ done 2026-09-16. Keys were pasted in
-  chat: rotate them once Tally is running and update `.secrets/plaid.env`.
+  chat: **rotate them** and update `.secrets/plaid.env`. Still outstanding.
+- **`TALLY_FERNET_KEY` into Vaultwarden.** It exists only in `stacks/tally/.env`
+  on the server. Lose it and all three bank connections have to be made again.
+- ~~Connect real banks~~ done 2026-09-17, three of them.
 - Discord webhook URL for alerts (or reuse the Hermes channel).
 - Turn on push alerts in each bank app (Tally is the second net).

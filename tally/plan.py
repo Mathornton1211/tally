@@ -1,6 +1,6 @@
 """Runway, upcoming payments, and debt payoff. HANDOFF section 7 extended.
 
-Written for the situation the owner is actually in: several cards, income that is not
+Written for the situation this is built for: several cards, income that is not
 a salary, and a need to know two things before anything else.
 
   1. Do I make it to the next money, and what is due before then?
@@ -139,7 +139,7 @@ def _order(debts_: list[Debt], strategy: str) -> list[Debt]:
     if strategy == "avalanche":
         # Unknown rate sorts last: better to attack a rate we can prove.
         return sorted(debts_, key=lambda d: (d.apr is None, -(d.apr or ZERO), d.balance))
-    # "minimums" and "minimums-order" (the owner picked the target himself) keep the
+    # "minimums" and "minimums-order" (the user picked the target themselves) keep the
     # order they were handed.
     return list(debts_)
 
@@ -272,7 +272,7 @@ def runway(conn, horizon_days: int = 90, buffer: Decimal | None = None) -> dict:
     streams = [s for s in analytics.detect_recurring(stream_rows) if s.active]
     # Only money that actually leaves cash. A subscription billed to a card is
     # already inside that card's balance and its minimum payment; counting both
-    # would charge the owner twice for the same Netflix.
+    # would charge the user twice for the same Netflix.
     acct_type = {r["id"]: r["type"] for r in conn.execute("SELECT id, type FROM v_acct").fetchall()}
 
     events: list[Event] = []
@@ -404,7 +404,7 @@ def what_if(conn, monthly_income: Decimal, extra_to_debt: Decimal, cut_flexible_
     """One question: if this changes, what happens to the three dates that matter.
 
     Deliberately simple arithmetic on measured numbers, not a forecast model.
-    Every input is a monthly figure the owner can control or hope for.
+    Every input is a monthly figure the user can control or hope for.
     """
     today = date.today()
     essentials = essentials_per_month(conn)

@@ -1,6 +1,6 @@
 """Bills worth a phone call, with the numbers and a script.
 
-The facts come from what the owner has actually paid: how long, how much, and whether
+The facts come from what the user has actually paid: how long, how much, and whether
 the price crept up. The script is templated, not generated, so it never invents
 a discount that was never offered.
 """

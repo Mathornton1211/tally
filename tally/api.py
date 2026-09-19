@@ -230,7 +230,11 @@ def link_token(body: LinkTokenIn):
             raise HTTPException(404, "no such item")
         access_token = state["box"].open(row["access_token_enc"])
     try:
-        resp = state["plaid"].link_token_create("mat", s.redirect_uri, access_token)
+        # Plaid wants a stable id for whoever is linking, not a display name.
+        # It was hardcoded to the first owner's, so every person in a household
+        # linked as the same end user.
+        user_id = f"tally-{scope.viewer.get() or 'household'}"
+        resp = state["plaid"].link_token_create(user_id, s.redirect_uri, access_token)
     except PlaidError as e:
         raise _plaid_http(e)
     return {"link_token": resp["link_token"]}

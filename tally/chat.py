@@ -7,7 +7,7 @@ Two model steps with real computation between them:
 
 The model never sees raw tables it could misread and never does arithmetic the
 query did not already do. Every dollar figure in the reply is checked against
-the result rows; anything that does not trace back is flagged to Mat.
+the result rows; anything that does not trace back is flagged rather than shown.
 """
 import json
 import re
