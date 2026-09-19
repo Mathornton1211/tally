@@ -325,6 +325,20 @@ Demo data: `scripts/seed_sandbox.py` builds an 11 month household across 5 Sandb
   a LAN address in a test, a regional utility as a fixture. None of them needed
   to be real to do their job. The export is now a formality for those files,
   which is the right place for it to be.
+- **A name needs a rule, not a phrasebook.** The owner's first name was handled
+  by a list of phrases -- "the owner has", "the owner says", "the owner " -- which missed every
+  case the list did not anticipate: "Waiting on the owner" at the end of a line, and
+  two places where the name was not prose at all. Replaced with `\bMat\b`, and
+  the same pattern added to the forbidden list so a miss fails the export.
+- **That found two real bugs, not privacy nits.** The dashboard greeting was
+  hardcoded to the owner's name, so every person in a household was greeted by
+  it; it now greets whoever is signed in. And `/api/link/token` sent that name as
+  Plaid's `client_user_id`, so every person linking a bank was the same end user
+  to Plaid; it is now `tally-<person id>`. Both had been invisible for weeks
+  because the person who built it is the person the hardcoding was correct for.
+  **A single-user assumption is a bug that only shows up on somebody else's
+  screen**, and the sanitiser found them by asking a different question than the
+  tests do.
 - **Keeping the two in step is the same command.** Files are replaced wholesale
   so an upstream deletion disappears publicly too, but the export's own git
   history is kept, so an update is an ordinary commit rather than a force-push
@@ -344,7 +358,7 @@ Demo data: `scripts/seed_sandbox.py` builds an 11 month household across 5 Sandb
 
 - Running in production on the home server against three real banks, behind
   Authentik, backed up to the NAS with a restore that has actually been done.
-- 297 tests, CI defined. **CI has never run** -- there is no remote, so nothing
+- 299 tests, CI defined. **CI has never run** -- there is no remote, so nothing
   has triggered it. Expect the first push to find something.
 - **Nothing is pushed anywhere.** No remote on the private repo; the export at
   `../tally-public` is one commit on disk. Publishing is one command and is

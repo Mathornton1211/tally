@@ -407,3 +407,32 @@ def test_setup_does_not_offer_budgets_before_there_is_history(api):
     sign_up(api)
     budget_step = next(x for x in api.get("/api/setup").json()["steps"] if x["key"] == "budget")
     assert budget_step["ready"] is False and budget_step["suggestion"] is None
+
+
+# ---------------------------------------------------------------- one person's assumptions
+
+def test_the_dashboard_greets_whoever_is_signed_in(api):
+    """The greeting was hardcoded to the first owner's name, so a household of
+    four was greeted by one person's name. Nobody noticed for weeks, because the
+    person who wrote it was the person it was correct for."""
+    sign_up(api, name="Alex", username="alex")
+    me = api.get("/api/people").json()
+    assert next(p for p in me["people"] if p["id"] == me["me"])["name"] == "Alex"
+
+
+def test_linking_identifies_the_person_to_plaid_not_a_name(api, monkeypatch):
+    """Plaid's client_user_id was one person's hardcoded name, so every person
+    in a household linked as the same end user."""
+    seen = {}
+
+    def fake_create(user_id, redirect_uri, access_token=None):
+        seen["user_id"] = user_id
+        return {"link_token": "link-sandbox-x"}
+
+    sign_up(api)
+    from tally.api import state
+    monkeypatch.setattr(state["plaid"], "link_token_create", fake_create)
+
+    assert api.post("/api/link/token", json={}).status_code == 200
+    me = api.get("/api/people").json()["me"]
+    assert seen["user_id"] == f"tally-{me}"
