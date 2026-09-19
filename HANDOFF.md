@@ -393,24 +393,45 @@ Demo data: `scripts/seed_sandbox.py` builds an 11 month household across 5 Sandb
 
 - Running in production on the home server against three real banks, behind
   Authentik, backed up to the NAS with a restore that has actually been done.
-- 318 tests, CI ran for the first time on 2026-09-18 and found a real bug (below). **CI has never run** -- there is no remote, so nothing
-  has triggered it. Expect the first push to find something.
-- **Nothing is pushed anywhere.** No remote on the private repo; the export at
-  `../tally-public` is one commit on disk. Publishing is one command and is
-  deliberately left to a human:
+- **Published 2026-09-18** at `github.com/Mathornton1211/tally`, public. The
+  private repo still has no remote and never will; the public one is the
+  export, re-synced with `scripts/make_public.py ../tally-public -m "…" --push`.
+- **318 tests, and CI is green** -- on a clean Linux runner, which is the first
+  evidence any of this works on a machine that is not this one.
 
-      cd ../tally-public && gh repo create tally --public --source=. --push
+**CI earned its keep on its first run (2026-09-18).** Six failures, one cause,
+and a real portability bug rather than a CI quirk.
+
+- The workflow set `TALLY_TIMEZONE=America/Los_Angeles` on a runner whose clock
+  is UTC. `session_timezone()` told Postgres; nothing told Python. That is
+  exactly the split-brain the session timezone was built to prevent, recreated
+  from configuration alone -- and among the six failures was the regression
+  test written for the original bug.
+- **A self-hosted app whose config can put it into a wrong state will be in
+  that state on somebody else's machine.** `db.align_process_timezone()` makes
+  it one decision: the process follows the name the database is given.
+- `tzset` is Unix-only, so Windows warns instead -- and deliberately does not
+  set `TZ`, because a value that cannot take effect would still change what
+  `session_timezone()` reports next time and make a dev box claim an alignment
+  it does not have.
+- **Then it failed again, on timing.** Several test modules capture
+  `TODAY = date.today()` at module scope and pytest imports those during
+  collection, before any fixture. Aligning in a fixture left the constants a
+  day off and the failures pointed everywhere except the cause: a 400-day-old
+  transaction measuring 399 days old. `conftest` is imported first, so the
+  alignment is a module-level call there, not a fixture.
 
 **Next, when this picks up again:**
 
-1. Publish, then watch CI fail and fix it. Nothing else can be trusted until
-   that has run once.
-2. CSV import (Mint, Monarch, YNAB). The most-asked-for thing that is missing,
+1. CSV import (Mint, Monarch, YNAB). The most-asked-for thing that is missing,
    and the difference between "try it" and "move to it".
-3. `scripts/demo.sh` has never been run end to end. It is the first thing a
+2. `scripts/demo.sh` has never been run end to end. It is the first thing a
    stranger touches.
-4. A third backup copy outside the building. The NAS and the server are in the
+3. A third backup copy outside the building. The NAS and the server are in the
    same room, which is one flood away from no copies at all.
+4. Rent is invisible to Tally (see the data-gaps entry). The warning is honest
+   but a warning is not a fix -- a recurring manual cost, entered once, would
+   be.
 
 **Still needs a person, not a commit:** the Fernet key into Vaultwarden (without
 it all three bank connections have to be made again), rotating the Plaid keys,

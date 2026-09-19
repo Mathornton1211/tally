@@ -319,8 +319,10 @@ Fair question to ask of anything you are about to give bank access to.
 - **Tests** — 318 of them, run on every push against a real Postgres. The suite
   includes the bugs that actually shipped, each one pinned by the test that
   would have caught it.
-- **CI** — `.github/workflows/ci.yml`: Python tests, web typecheck, lint,
-  build, and a check that the image contains what migrations need.
+- **CI** — `.github/workflows/ci.yml`: Python tests against a real Postgres,
+  web typecheck, lint, build, and a check that the image contains what
+  migrations need. It caught a genuine portability bug on its first run: the
+  app let its own configuration disagree with itself about what day it was.
 - **Migrations** — append-only, and a schema change on a database with data in
   it takes a rollback dump first and refuses to run if it cannot.
 
